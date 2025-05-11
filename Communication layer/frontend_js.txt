@@ -1,0 +1,462 @@
+/**
+ * Drone Control Center - Frontend Application
+ * 
+ * This JavaScript application connects to the backend and provides a user interface
+ * for controlling the drone and monitoring telemetry data.
+ */
+
+// Create map and UI when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize the application
+    DroneControlApp.init();
+});
+
+/**
+ * Drone Control Application
+ */
+const DroneControlApp = {
+    // Socket.IO instance
+    socket: null,
+    
+    // Leaflet map instance
+    map: null,
+    
+    // Drone marker on map
+    droneMarker: null,
+    
+    // Home position marker
+    homeMarker: null,
+    
+    // Mission waypoints layer
+    waypointsLayer: null,
+    
+    // Mission path layer
+    missionPathLayer: null,
+    
+    // Current mission data
+    currentMission: null,
+    
+    // Current status
+    droneStatus: null,
+    
+    // Mission waypoints
+    missionWaypoints: [],
+    
+    // Drone icon
+    droneIcon: null,
+    
+    /**
+     * Initialize the application
+     */
+    init: function() {
+        // Initialize Socket.IO
+        this.initSocket();
+        
+        // Initialize map
+        this.initMap();
+        
+        // Initialize UI
+        this.initUI();
+        
+        // Load available missions
+        this.loadMissions();
+        
+        // Log initialization
+        this.log('Application initialized');
+    },
+    
+    /**
+     * Initialize Socket.IO connection
+     */
+    initSocket: function() {
+        this.socket = io();
+        
+        // Connection events
+        this.socket.on('connect', () => {
+            this.log('Connected to server');
+            this.updateConnectionStatus(true);
+        });
+        
+        this.socket.on('disconnect', () => {
+            this.log('Disconnected from server');
+            this.updateConnectionStatus(false);
+        });
+        
+        // Telemetry events
+        this.socket.on('telemetry', data => {
+            this.updateTelemetry(data);
+        });
+        
+        this.socket.on('position', data => {
+            this.updatePosition(data);
+        });
+        
+        this.socket.on('attitude', data => {
+            this.updateAttitude(data);
+        });
+        
+        this.socket.on('mission_event', data => {
+            this.handleMissionEvent(data);
+        });
+    },
+    
+    /**
+     * Initialize Leaflet map
+     */
+    initMap: function() {
+        // Create map
+        this.map = L.map('map').setView([47.6062, -122.3321], 13);
+        
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(this.map);
+        
+        // Create drone icon
+        this.droneIcon = L.icon({
+            iconUrl: '/static/img/drone.png',
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
+        });
+        
+        // Create waypoints layer
+        this.waypointsLayer = L.layerGroup().addTo(this.map);
+        
+        // Create mission path layer
+        this.missionPathLayer = L.layerGroup().addTo(this.map);
+        
+        // Set up click handler for map clicks (add waypoints in mission planning)
+        this.map.on('click', event => {
+            if (document.getElementById('add-waypoint-mode').checked) {
+                this.addWaypoint(event.latlng.lat, event.latlng.lng);
+            }
+        });
+    },
+    
+    /**
+     * Initialize UI elements and event handlers
+     */
+    initUI: function() {
+        // Arm/Disarm buttons
+        document.getElementById('arm-btn').addEventListener('click', () => {
+            this.armDrone();
+        });
+        
+        document.getElementById('disarm-btn').addEventListener('click', () => {
+            this.disarmDrone();
+        });
+        
+        // Takeoff button
+        document.getElementById('takeoff-btn').addEventListener('click', () => {
+            const altitude = parseFloat(document.getElementById('takeoff-altitude').value);
+            this.takeoff(altitude);
+        });
+        
+        // Land button
+        document.getElementById('land-btn').addEventListener('click', () => {
+            this.land();
+        });
+        
+        // RTL button
+        document.getElementById('rtl-btn').addEventListener('click', () => {
+            this.returnToLaunch();
+        });
+        
+        // Flight mode selector
+        document.getElementById('flight-mode').addEventListener('change', event => {
+            this.setFlightMode(event.target.value);
+        });
+        
+        // Mission control buttons
+        document.getElementById('load-mission-btn').addEventListener('click', () => {
+            const missionSelect = document.getElementById('mission-select');
+            const missionName = missionSelect.value;
+            if (missionName) {
+                this.loadMission(missionName);
+            }
+        });
+        
+        document.getElementById('start-mission-btn').addEventListener('click', () => {
+            this.startMission();
+        });
+        
+        document.getElementById('stop-mission-btn').addEventListener('click', () => {
+            this.stopMission();
+        });
+        
+        // Mission planning
+        document.getElementById('new-mission-btn').addEventListener('click', () => {
+            this.newMission();
+        });
+        
+        document.getElementById('save-mission-btn').addEventListener('click', () => {
+            this.saveMission();
+        });
+        
+        document.getElementById('clear-waypoints-btn').addEventListener('click', () => {
+            this.clearWaypoints();
+        });
+    },
+    
+    /**
+     * Update connection status indicator
+     */
+    updateConnectionStatus: function(connected) {
+        const statusElem = document.getElementById('connection-status');
+        if (connected) {
+            statusElem.textContent = 'Connected';
+            statusElem.className = 'status-connected';
+        } else {
+            statusElem.textContent = 'Disconnected';
+            statusElem.className = 'status-disconnected';
+        }
+    },
+    
+    /**
+     * Update telemetry data display
+     */
+    updateTelemetry: function(data) {
+        this.droneStatus = data;
+        
+        // Update status indicators
+        document.getElementById('status-armed').textContent = data.armed ? 'Armed' : 'Disarmed';
+        document.getElementById('status-mode').textContent = data.mode;
+        document.getElementById('status-mission').textContent = data.mission.running ? `Running: ${data.mission.name}` : 'Idle';
+        
+        // Update position
+        if (data.position && data.position.lat && data.position.lon) {
+            document.getElementById('status-lat').textContent = data.position.lat.toFixed(6);
+            document.getElementById('status-lon').textContent = data.position.lon.toFixed(6);
+            document.getElementById('status-alt').textContent = data.position.alt ? `${data.position.alt.toFixed(1)} m` : 'N/A';
+            
+            this.updateDroneMarker(data.position.lat, data.position.lon, data.position.alt || 0);
+        }
+        
+        // Update attitude
+        if (data.attitude) {
+            document.getElementById('status-roll').textContent = data.attitude.roll ? `${data.attitude.roll.toFixed(1)}°` : 'N/A';
+            document.getElementById('status-pitch').textContent = data.attitude.pitch ? `${data.attitude.pitch.toFixed(1)}°` : 'N/A';
+            document.getElementById('status-heading').textContent = data.attitude.heading ? `${data.attitude.heading.toFixed(1)}°` : 'N/A';
+        }
+        
+        // Update speed
+        if (data.speed) {
+            document.getElementById('status-airspeed').textContent = data.speed.airspeed ? `${data.speed.airspeed.toFixed(1)} m/s` : 'N/A';
+            document.getElementById('status-groundspeed').textContent = data.speed.groundspeed ? `${data.speed.groundspeed.toFixed(1)} m/s` : 'N/A';
+        }
+        
+        // Update battery
+        if (data.battery) {
+            const batteryLevel = data.battery.level !== null ? data.battery.level : '?';
+            const voltage = data.battery.voltage !== null ? data.battery.voltage.toFixed(1) : '?';
+            document.getElementById('status-battery').textContent = `${batteryLevel}% (${voltage}V)`;
+            
+            // Set battery indicator color
+            const batteryIndicator = document.getElementById('battery-indicator');
+            if (data.battery.level !== null) {
+                let batteryColor;
+                if (data.battery.level > 75) {
+                    batteryColor = 'green';
+                } else if (data.battery.level > 50) {
+                    batteryColor = 'yellowgreen';
+                } else if (data.battery.level > 25) {
+                    batteryColor = 'orange';
+                } else {
+                    batteryColor = 'red';
+                }
+                batteryIndicator.style.width = `${data.battery.level}%`;
+                batteryIndicator.style.backgroundColor = batteryColor;
+            }
+        }
+        
+        // Update GPS
+        if (data.gps) {
+            const fixType = data.gps.fix;
+            let fixText;
+            switch (fixType) {
+                case 0: fixText = 'No GPS'; break;
+                case 1: fixText = 'No Fix'; break;
+                case 2: fixText = '2D Fix'; break;
+                case 3: fixText = '3D Fix'; break;
+                default: fixText = 'Unknown';
+            }
+            document.getElementById('status-gps').textContent = 
+                `${fixText} (${data.gps.satellites || 0} satellites)`;
+        }
+        
+        // Update flight mode dropdown
+        const modeSelect = document.getElementById('flight-mode');
+        if (modeSelect.value !== data.mode) {
+            modeSelect.value = data.mode;
+        }
+    },
+    
+    /**
+     * Update drone position
+     */
+    updatePosition: function(data) {
+        if (data.lat && data.lon) {
+            this.updateDroneMarker(data.lat, data.lon, data.alt || 0);
+        }
+    },
+    
+    /**
+     * Update drone attitude
+     */
+    updateAttitude: function(data) {
+        // Update heading of drone icon
+        if (this.droneMarker && data.heading !== undefined) {
+            // TODO: Implement drone rotation based on heading
+            // For now, we'll just update the tooltip
+            this.droneMarker.setTooltipContent(`Heading: ${data.heading.toFixed(1)}°`);
+        }
+    },
+    
+    /**
+     * Update drone marker on map
+     */
+    updateDroneMarker: function(lat, lon, alt) {
+        const position = L.latLng(lat, lon);
+        
+        if (!this.droneMarker) {
+            // Create marker if it doesn't exist
+            this.droneMarker = L.marker(position, {
+                icon: this.droneIcon,
+                zIndexOffset: 1000
+            }).addTo(this.map);
+            
+            this.droneMarker.bindTooltip(`Alt: ${alt.toFixed(1)} m`).openTooltip();
+            
+            // Center map on drone
+            this.map.setView(position, 16);
+            
+            // Also create home marker at first position
+            this.homeMarker = L.marker(position, {
+                icon: L.icon({
+                    iconUrl: '/static/img/home.png',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                })
+            }).addTo(this.map);
+            this.homeMarker.bindTooltip('Home');
+        } else {
+            // Update existing marker
+            this.droneMarker.setLatLng(position);
+            this.droneMarker.setTooltipContent(`Alt: ${alt.toFixed(1)} m`);
+        }
+    },
+    
+    /**
+     * Handle mission events
+     */
+    handleMissionEvent: function(data) {
+        const eventType = Object.keys(data)[0];
+        
+        switch (eventType) {
+            case 'mission_started':
+                this.log(`Mission started: ${data.name}`);
+                break;
+                
+            case 'mission_completed':
+                this.log(`Mission completed: ${data.name}`);
+                break;
+                
+            case 'waypoint_reached':
+                this.log(`Reached waypoint ${data.index + 1}`);
+                if (data.action) {
+                    this.log(`Performing action: ${data.action}`);
+                }
+                break;
+        }
+    },
+    
+    /**
+     * Load list of available missions
+     */
+    loadMissions: function() {
+        fetch('/api/missions')
+            .then(response => response.json())
+            .then(missions => {
+                const select = document.getElementById('mission-select');
+                
+                // Clear existing options
+                while (select.firstChild) {
+                    select.removeChild(select.firstChild);
+                }
+                
+                // Add placeholder
+                const placeholder = document.createElement('option');
+                placeholder.value = '';
+                placeholder.textContent = '-- Select Mission --';
+                select.appendChild(placeholder);
+                
+                // Add missions
+                missions.forEach(mission => {
+                    const option = document.createElement('option');
+                    option.value = mission.name;
+                    option.textContent = `${mission.name} (${mission.waypoints} waypoints)`;
+                    select.appendChild(option);
+                });
+                
+                this.log(`Loaded ${missions.length} missions`);
+            })
+            .catch(error => {
+                this.log(`Error loading missions: ${error.message}`);
+            });
+    },
+    
+    /**
+     * Load a specific mission
+     */
+    loadMission: function(name) {
+        fetch(`/api/missions/${name}`)
+            .then(response => response.json())
+            .then(mission => {
+                this.currentMission = mission;
+                this.missionWaypoints = mission.waypoints;
+                
+                // Display waypoints on map
+                this.displayMissionWaypoints();
+                
+                this.log(`Loaded mission: ${mission.name}`);
+                
+                // Load mission to drone
+                return fetch(`/api/control/load_mission/${name}`, {
+                    method: 'POST'
+                });
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    this.log('Mission loaded to drone');
+                } else {
+                    this.log(`Error: ${result.error}`);
+                }
+            })
+            .catch(error => {
+                this.log(`Error: ${error.message}`);
+            });
+    },
+    
+    /**
+     * Display mission waypoints on map
+     */
+    displayMissionWaypoints: function() {
+        // Clear existing waypoints
+        this.waypointsLayer.clearLayers();
+        this.missionPathLayer.clearLayers();
+        
+        if (!this.missionWaypoints || this.missionWaypoints.length === 0) {
+            return;
+        }
+        
+        // Add waypoint markers
+        const points = [];
+        this.missionWaypoints.forEach((wp, index) => {
+            const position = L.latLng(wp.lat, wp.lon);
+            points.push(position);
+            
+            // Create marker
+            const marker = L.marker(position, {
+                icon: L.divIcon({
+                    className: 'way
