@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ripley Ground station</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 50%, #0f1419 100%);
+            color: #e0e6ed;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .ground-station {
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            grid-template-rows: 60px 1fr 200px;
+            gap: 10px;
+            padding: 10px;
+            height: 100vh;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3b82f6;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #10b981;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .left-panel, .right-panel {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+            overflow-y: auto;
+        }
+
+        .main-display {
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .telemetry-panel {
+            grid-column: 1 / -1;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #3b82f6;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 5px;
+        }
+
+        .flight-controls {
+            display: grid;
+            gap: 10px;
+        }
+
+        .control-group {
+            background: rgba(51, 65, 85, 0.5);
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+        }
+
+        .control-group h3 {
+            margin-bottom: 10px;
+            color: #cbd5e1;
+            font-size: 14px;
+        }
+
+        .button-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-size: 12px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .mode-selector {
+            margin-bottom: 15px;
+        }
+
+        .mode-selector select {
+            width: 100%;
+            padding: 10px;
+            background: rgba(51, 65, 85, 0.8);
+            border: 1px solid #475569;
+            border-radius: 6px;
+            color: #e0e6ed;
+            font-size: 14px;
+        }
+
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .telemetry-item {
+            background: rgba(51, 65, 85, 0.5);
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            text-align: center;
+        }
+
+        .telemetry-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3b82f6;
+        }
+
+        .telemetry-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+
+        .attitude-display {
+            margin-bottom: 20px;
+        }
+
+        .horizon {
+            width: 150px;
+            height: 150px;
+            background: linear-gradient(to bottom, #87ceeb 50%, #8b4513 50%);
+            border-radius: 50%;
+            margin: 0 auto;
+            position: relative;
+            overflow: hidden;
+            border: 3px solid #475569;
+        }
+
+        .horizon-line {
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: #fbbf24;
+            transform-origin: center;
+        }
+
+        .aircraft-symbol {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fbbf24;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .map-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #1e293b;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+        }
+
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            height: 100%;
+        }
+
+        .chart-wrapper {
+            background: rgba(51, 65, 85, 0.5);
+            border-radius: 6px;
+            padding: 10px;
+            border: 1px solid #475569;
+        }
+
+        .waypoint-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .waypoint-item {
+            background: rgba(51, 65, 85, 0.5);
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border: 1px solid #475569;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .waypoint-coords {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .delete-waypoint {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 10px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            background: rgba(51, 65, 85, 0.8);
+            border: 1px solid #475569;
+            border-radius: 4px;
+            color: #e0e6ed;
+            font-size: 14px;
+        }
+
+        .emergency-stop {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            background: radial-gradient(circle, #dc2626, #991b1b);
+            border: 3px solid #fca5a5;
+            border-radius: 50%;
+            width: 80px;
+            height: 80px;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(220, 38, 38, 0.5);
+            z-index: 1000;
+        }
+
+        .emergency-stop:hover {
+            transform: translateY(-50%) scale(1.1);
+            box-shadow: 0 0 30px rgba(220, 38, 38, 0.8);
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(30, 41, 59, 0.95);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid #334155;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .log-container {
+            height: 120px;
+            overflow-y: auto;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+
+        .log-entry.info { color: #3b82f6; }
+        .log-entry.warning { color: #f59e0b; }
+        .log-entry.error { color: #ef4444; }
+        .log-entry.success { color: #10b981; }
+
+        .compass {
+            width: 100px;
+            height: 100px;
+            border: 3px solid #475569;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            position: relative;
+            background: radial-gradient(circle, #1e293b, #0f172a);
+        }
+
+        .compass-needle {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            width: 2px;
+            height: 35px;
+            background: linear-gradient(to bottom, #ef4444, #fbbf24);
+            transform-origin: bottom center;
+            border-radius: 1px;
+        }
+
+        .compass-directions {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            right: 5px;
+            bottom: 5px;
+            border-radius: 50%;
+        }
+
+        .compass-n, .compass-s, .compass-e, .compass-w {
+            position: absolute;
+            font-size: 12px;
+            font-weight: bold;
+            color: #e0e6ed;
+        }
+
+        .compass-n { top: 5px; left: 50%; transform: translateX(-50%); }
+        .compass-s { bottom: 5px; left: 50%; transform: translateX(-50%); }
+        .compass-e { right: 5px; top: 50%; transform: translateY(-50%); }
+        .compass-w { left: 5px; top: 50%; transform: translateY(-50%); }
+    </style>
+</head>
+<body>
+    <div class="ground-station">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">🚁 Ripley Autopilot V 1.3</div>
+            <div class="connection-status">
+                <div class="status-indicator" id="connectionStatus"></div>
+                <span id="connectionText">Disconnected</span>
+            </div>
+        </div>
+
+        <!-- Left Panel - Flight Controls -->
+        <div class="left-panel">
+            <div class="panel-title">Flight Controls</div>
+            
+            <div class="mode-selector">
+                <select id="flightModeSelect">
+                    <option value="manual">Manual</option>
+                    <option value="stabilize">Stabilize</option>
+                    <option value="altitude_hold">Altitude Hold</option>
+                    <option value="position_hold">Position Hold</option>
+                    <option value="auto">Auto</option>
+                    <option value="return_to_launch">Return to Launch</option>
+                    <option value="land">Land</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <h3>Arming</h3>
+                <div class="button-grid">
+                    <button class="btn btn-success" id="armBtn">ARM</button>
+                    <button class="btn btn-danger" id="disarmBtn">DISARM</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <h3>Flight Commands</h3>
+                <div class="button-grid">
+                    <button class="btn btn-primary" id="takeoffBtn">TAKEOFF</button>
+                    <button class="btn btn-primary" id="landBtn">LAND</button>
+                    <button class="btn btn-primary" id="rtlBtn">RTL</button>
+                    <button class="btn btn-primary" id="holdBtn">HOLD</button>
+                </div>
+            </div>
+
+            <div class="attitude-display">
+                <h3 style="text-align: center; margin-bottom: 10px; color: #cbd5e1;">Attitude</h3>
+                <div class="horizon" id="horizon">
+                    <div class="horizon-line" id="horizonLine"></div>
+                    <div class="aircraft-symbol">✈</div>
+                </div>
+            </div>
+
+            <div class="compass" id="compass">
+                <div class="compass-needle" id="compassNeedle"></div>
+                <div class="compass-directions">
+                    <div class="compass-n">N</div>
+                    <div class="compass-s">S</div>
+                    <div class="compass-e">E</div>
+                    <div class="compass-w">W</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Display - Map/3D View -->
+        <div class="main-display">
+            <div class="map-container" id="mapContainer">
+                <div>
+                    <h2>📍 Mission Map</h2>
+                    <p>Interactive map view would be displayed here</p>
+                    <p>• Drone position and heading</p>
+                    <p>• Waypoints and flight path</p>
+                    <p>• Home position marker</p>
+                    <p>• Real-time tracking</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel - Mission Planning -->
+        <div class="right-panel">
+            <div class="panel-title">Mission Planning</div>
+            
+            <div class="control-group">
+                <h3>Add Waypoint</h3>
+                <div class="input-group">
+                    <label>Latitude</label>
+                    <input type="number" id="waypointLat" step="0.000001" placeholder="40.712800">
+                </div>
+                <div class="input-group">
+                    <label>Longitude</label>
+                    <input type="number" id="waypointLon" step="0.000001" placeholder="-74.006000">
+                </div>
+                <div class="input-group">
+                    <label>Altitude (m)</label>
+                    <input type="number" id="waypointAlt" step="0.1" placeholder="10">
+                </div>
+                <button class="btn btn-primary" id="addWaypointBtn" style="width: 100%;">Add Waypoint</button>
+            </div>
+
+            <div class="control-group">
+                <h3>Mission Control</h3>
+                <div class="button-grid">
+                    <button class="btn btn-success" id="startMissionBtn">START</button>
+                    <button class="btn btn-danger" id="pauseMissionBtn">PAUSE</button>
+                    <button class="btn btn-primary" id="clearMissionBtn">CLEAR</button>
+                    <button class="btn btn-primary" id="uploadMissionBtn">UPLOAD</button>
+                </div>
+            </div>
+
+            <div class="waypoint-list" id="waypointList">
+                <!-- Waypoints will be added here dynamically -->
+            </div>
+
+            <div class="control-group">
+                <h3>System Log</h3>
+                <div class="log-container" id="logContainer">
+                    <!-- Log entries will appear here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Telemetry Panel -->
+        <div class="telemetry-panel">
+            <div class="panel-title">Real-time Telemetry</div>
+            <div class="telemetry-grid">
+                <div class="telemetry-item">
+                    <div class="telemetry-value" id="altitude">0.0</div>
+                    <div class="telemetry-label">Altitude (m)</div>
+                </div>
+                <div class="telemetry-item">
+                    <div class="telemetry-value" id="groundSpeed">0.0</div>
+                    <div class="telemetry-label">Ground Speed (m/s)</div>
+                </div>
+                <div class="telemetry-item">
+                    <div class="telemetry-value" id="batteryVoltage">12.0</div>
+                    <div class="telemetry-label">Battery (V)</div>
+                </div>
+                <div class="telemetry-item">
+                    <div class="telemetry-value" id="gpsStatus">NO FIX</div>
+                    <div class="telemetry-label">GPS Status</div>
+                </div>
+                <div class="telemetry-item">
+                    <div class="telemetry-value" id="flightMode">MANUAL</div>
+                    <div class="telemetry-label">Flight Mode</div>
+                </div>
+                <div class="telemetry-item">
+                    <div class="telemetry-value" id="armed">DISARMED</div>
+                    <div class="telemetry-label">Status</div>
+                </div>
+            </div>
+            
+            <div class="charts-container" style="margin-top: 20px;">
+                <div class="chart-wrapper">
+                    <canvas id="altitudeChart"></canvas>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="batteryChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emergency Stop Button -->
+    <button class="emergency-stop" id="emergencyStop">
+        EMERGENCY<br>STOP
+    </button>
+
+    <script>
+        class GroundStation {
+            constructor() {
+                this.connected = false;
+                this.telemetryData = {
+                    position: { lat: 0, lon: 0, alt: 0 },
+                    attitude: { roll: 0, pitch: 0, yaw: 0 },
+                    velocity: { vx: 0, vy: 0, vz: 0 },
+                    batteryVoltage: 12.0,
+                    gpsStatus: false,
+                    flightMode: 'manual',
+                    armed: false
+                };
+                this.waypoints = [];
+                this.logEntries = [];
+                
+                this.initializeUI();
+                this.initializeCharts();
+                this.startTelemetrySimulation();
+                this.bindEvents();
+            }
+
+            initializeUI() {
+                // Initialize UI elements
+                this.updateConnectionStatus();
+                this.updateTelemetryDisplay();
+                this.addLogEntry('System initialized', 'info');
+            }
+
+            initializeCharts() {
+                // Altitude Chart
+                const altCtx = document.getElementById('altitudeChart').getContext('2d');
+                this.altitudeChart = new Chart(altCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Altitude (m)',
+                            data: [],
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: { display: false },
+                            y: { 
+                                beginAtZero: true,
+                                grid: { color: '#475569' },
+                                ticks: { color: '#94a3b8' }
+                            }
+                        }
+                    }
+                });
+
+                // Battery Chart
+                const battCtx = document.getElementById('batteryChart').getContext('2d');
+                this.batteryChart = new Chart(battCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Battery (V)',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: { display: false },
+                            y: { 
+                                min: 10,
+                                max: 13,
+                                grid: { color: '#475569' },
+                                ticks: { color: '#94a3b8' }
+                            }
+                        }
+                    }
+                });
+            }
+
+            bindEvents() {
+                // Flight mode selection
+                document.getElementById('flightModeSelect').addEventListener('change', (e) => {
+                    this.sendCommand('setFlightMode', e.target.value);
+                });
+
+                // Control buttons
+                document.getElementById('armBtn').addEventListener('click', () => {
+                    this.sendCommand('arm');
+                });
+
+                document.getElementById('disarmBtn').addEventListener('click', () => {
+                    this.sendCommand('disarm');
+                });
+
+                document.getElementById('takeoffBtn').addEventListener('click', () => {
+                    this.sendCommand('takeoff');
+                });
+
+                document.getElementById('landBtn').addEventListener('click', () => {
+                    this.sendCommand('land');
+                });
+
+                document.getElementById('rtlBtn').addEventListener('click', () => {
+                    this.sendCommand('returnToLaunch');
+                });
+
+                document.getElementById('holdBtn').addEventListener('click', () => {
+                    this.sendCommand('hold');
+                });
+
+                // Mission planning
+                document.getElementById('addWaypointBtn').addEventListener('click', () => {
+                    this.addWaypoint();
+                });
+
+                document.getElementById('startMissionBtn').addEventListener('click', () => {
+                    this.sendCommand('startMission');
+                });
+
+                document.getElementById('pauseMissionBtn').addEventListener('click', () => {
+                    this.sendCommand('pauseMission');
+                });
+
+                document.getElementById('clearMissionBtn').addEventListener('click', () => {
+                    this.clearWaypoints();
+                });
+
+                document.getElementById('uploadMissionBtn').addEventListener('click', () => {
+                    this.uploadMission();
+                });
+
+                // Emergency stop
+                document.getElementById('emergencyStop').addEventListener('click', () => {
+                    this.emergencyStop();
+                });
+            }
+
+            sendCommand(command, data = null) {
+                // In a real implementation, this would send commands to the drone
+                this.addLogEntry(`Command sent: ${command} ${data ? JSON.stringify(data) : ''}`, 'info');
+                
+                // Simulate responses
+                switch(command) {
+                    case 'arm':
+                        this.telemetryData.armed = true;
+                        this.addLogEntry('Drone armed', 'success');
+                        break;
+                    case 'disarm':
+                        this.telemetryData.armed = false;
+                        this.addLogEntry('Drone disarmed', 'success');
+                        break;
+                    case 'setFlightMode':
+                        this.telemetryData.flightMode = data;
+                        this.addLogEntry(`Flight mode changed to: ${data}`, 'success');
+                        break;
+                    case 'takeoff':
+                        if (this.telemetryData.armed) {
+                            this.addLogEntry('Takeoff initiated', 'success');
+                        } else {
+                            this.addLogEntry('Cannot takeoff: Drone not armed', 'error');
+                        }
+                        break;
+                }
+            }
+
+            addWaypoint() {
+                const lat = parseFloat(document.getElementById('waypointLat').value);
+                const lon = parseFloat(document.getElementById('waypointLon').value);
+                const alt = parseFloat(document.getElementById('waypointAlt').value);
+
+                if (isNaN(lat) || isNaN(lon) || isNaN(alt)) {
+                    this.addLogEntry('Invalid waypoint coordinates', 'error');
+                    return;
+                }
+
+                const waypoint = { lat, lon, alt, id: Date.now() };
+                this.waypoints.push(waypoint);
+                this.updateWaypointList();
+                this.addLogEntry(`Waypoint added: ${lat.toFixed(6)}, ${lon.toFixed(6)}, ${alt}m`, 'success');
+
+                // Clear inputs
+                document.getElementById('waypointLat').value = '';
+                document.getElementById('waypointLon').value = '';
+                document.getElementById('waypointAlt').value = '';
+            }
+
+            removeWaypoint(id) {
+                this.waypoints = this.waypoints.filter(wp => wp.id !== id);
+                this.updateWaypointList();
+                this.addLogEntry('Waypoint removed', 'info');
+            }
+
+            updateWaypointList() {
+                const container = document.getElementById('waypointList');
+                container.innerHTML = '';
+
+                this.waypoints.forEach((waypoint, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'waypoint-item';
+                    div.innerHTML = `
+                        <div>
+                            <strong>WP${index + 1}</strong>
+                            <div class="waypoint-coords">
+                                ${waypoint.lat.toFixed(6)}, ${waypoint.lon.toFixed(6)}<br>
+                                Alt: ${waypoint.alt}m
+                            </div>
+                        </div>
+                        <button class="delete-waypoint" onclick="groundStation.removeWaypoint(${waypoint.id})">✕</button>
+                    `;
+                    container.appendChild(div);
+                });
+            }
+
+            clearWaypoints() {
+                this.waypoints = [];
+                this.updateWaypointList();
+                this.addLogEntry('All waypoints cleared', 'info');
+            }
+
+            uploadMission() {
+                if (this.waypoints.length === 0) {
+                    this.addLogEntry('No waypoints to upload', 'warning');
+                    return;
+                }
+                
+                this.addLogEntry(`Mission uploaded: ${this.waypoints.length} waypoints`, 'success');
+            }
+
+            emergencyStop() {
+                this.sendCommand('emergencyStop');
+                this.addLogEntry('EMERGENCY STOP ACTIVATED', 'error');
+                this.telemetryData.armed = false;
+                this.telemetryData.flightMode = 'emergency';
+            }
+
+            addLogEntry(message, type = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                const entry = { message, type, timestamp };
+                this.logEntries.unshift(entry);
+                
+                // Keep only last 50 entries
+                if (this.logEntries.length > 50) {
+                    this.logEntries = this.logEntries.slice(0, 50);
+                }
+                
+                this.updateLogDisplay();
+            }
+
+            updateLogDisplay() {
+                const container = document.getElementById('logContainer');
+                container.innerHTML = '';
+                
+                this.logEntries.slice(0, 10).forEach(entry => {
+                    const div = document.createElement('div');
+                    div.className = `log-entry ${entry.type}`;
+                    div.textContent = `[${entry.timestamp}] ${entry.message}`;
+                    container.appendChild(div);
+                });
+                
+                container.scrollTop = 0;
+            }
+
+            updateConnectionStatus() {
+                const indicator = document.getElementById('connectionStatus');
+                const text = document.getElementById('connectionText');
+                
+                if (this.connected) {
+                    indicator.classList.add('connected');
+                    text.textContent = 'Connected';
+                } else {
+                    indicator.classList.remove('connected');
+                    text.textContent = 'Disconnected';
+                }
+            }
+
+            updateTelemetryDisplay() {
+                // Update telemetry values
+                document.getElementById('altitude').textContent = this.telemetryData.position.alt.toFixed(1);
+                document.getElementById('groundSpeed').textContent = Math.sqrt(
+                    this.telemetryData.velocity.vx ** 2 + this.telemetryData.velocity.vy ** 2
+                ).toFixed(1);
+                document.getElementById('batteryVoltage').textContent = this.telemetryData.batteryVoltage.toFixed(1);
+                document.getElementById('gpsStatus').textContent = this.telemetryData.gpsStatus ? 'GPS FIX' : 'NO FIX';
+                document.getElementById('flightMode').textContent = this.telemetryData.flightMode.toUpperCase();
+                document.getElementById('armed').textContent = this.telemetryData.armed ? 'ARMED' : 'DISARMED';
+
+                // Update attitude display
+                this.updateAttitudeDisplay();
+                this.updateCompass();
+                this.updateCharts();
+            }
+
+            updateAttitudeDisplay() {
+                const horizonLine = document.getElementById('horizonLine');
+                const horizon = document.getElementById('horizon');
+                
+                // Apply roll rotation to horizon
+                const roll = this.telemetryData.attitude.roll;
+                const pitch = this.telemetryData.attitude.pitch;
+                
+                horizonLine.style.transform = `rotate(${roll}deg)`;
+                
+                // Simulate pitch by moving the horizon up/down
+                const pitchOffset = pitch * 2; // Scale factor for visual effect
+                horizon.style.background = `linear-gradient(to bottom, #87ceeb ${50 - pitchOffset}%, #8b4513 ${50 - pitchOffset}%)`;
+            }
+
+            updateCompass() {
+                const needle = document.getElementById('compassNeedle');
+                const yaw = this.telemetryData.attitude.yaw;
+                needle.style.transform = `translateX(-50%) rotate(${yaw}deg)`;
+            }
+
+            updateCharts() {
+                const now = new Date().toLocaleTimeString();
+                
+                // Update altitude chart
+                this.altitudeChart.data.labels.push(now);
+                this.altitudeChart.data.datasets[0].data.push(this.telemetryData.position.alt);
+                
+                // Keep only last 20 data points
+                if (this.altitudeChart.data.labels.length > 20) {
+                    this.altitudeChart.data.labels.shift();
+                    this.altitudeChart.data.datasets[0].data.shift();
+                }
+                
+                this.altitudeChart.update('none');
+                
+                // Update battery chart
+                this.batteryChart.data.labels.push(now);
+                this.batteryChart.data.datasets[0].data.push(this.telemetryData.batteryVoltage);
+                
+                if (this.batteryChart.data.labels.length > 20) {
+                    this.batteryChart.data.labels.shift();
+                    this.batteryChart.data.datasets[0].data.shift();
+                }
+                
+                this.batteryChart.update('none');
+            }
+
+            startTelemetrySimulation() {
+                // Simulate telemetry data updates
+                setInterval(() => {
+                    // Simulate flight data
+                    if (this.telemetryData.armed && this.telemetryData.flightMode !== 'manual') {
+                        // Simulate altitude changes
+                        this.telemetryData.position.alt += (Math.random() - 0.5) * 0.5;
+                        this.telemetryData.position.alt = Math.max(0, this.telemetryData.position.alt);
+                        
+                        // Simulate attitude changes
+                        this.telemetryData.attitude.roll += (Math.random() - 0.5) * 2;
+                        this.telemetryData.attitude.pitch += (Math.random() - 0.5) * 2;
+                        this.telemetryData.attitude.yaw += (Math.random() - 0.5) * 3;
+                        
+                        // Keep attitudes within reasonable bounds
+                        this.telemetryData.attitude.roll = Math.max(-30, Math.min(30, this.telemetryData.attitude.roll));
+                        this.telemetryData.attitude.pitch = Math.max(-30, Math.min(30, this.telemetryData.attitude.pitch));
+                        this.telemetryData.attitude.yaw = (this.telemetryData.attitude.yaw + 360) % 360;
+                        
+                        // Simulate battery drain
+                        this.telemetryData.batteryVoltage -= 0.001;
+                        this.telemetryData.batteryVoltage = Math.max(10.0, this.telemetryData.batteryVoltage);
+                        
+                        // Simulate GPS
+                        this.telemetryData.gpsStatus = Math.random() > 0.1; // 90% GPS fix rate
+                        
+                        // Simulate velocity
+                        this.telemetryData.velocity.vx = (Math.random() - 0.5) * 10;
+                        this.telemetryData.velocity.vy = (Math.random() - 0.5) * 10;
+                        this.telemetryData.velocity.vz = (Math.random() - 0.5) * 2;
+                    }
+                    
+                    // Simulate connection status
+                    this.connected = Math.random() > 0.05; // 95% connection rate
+                    
+                    this.updateConnectionStatus();
+                    this.updateTelemetryDisplay();
+                }, 100); // Update at 10Hz
+                
+                // Add sample waypoints for demonstration
+                setTimeout(() => {
+                    document.getElementById('waypointLat').value = '40.712800';
+                    document.getElementById('waypointLon').value = '-74.006000';
+                    document.getElementById('waypointAlt').value = '10';
+                    this.addWaypoint();
+                    
+                    document.getElementById('waypointLat').value = '40.713000';
+                    document.getElementById('waypointLon').value = '-74.005800';
+                    document.getElementById('waypointAlt').value = '15';
+                    this.addWaypoint();
+                    
+                    document.getElementById('waypointLat').value = '40.713200';
+                    document.getElementById('waypointLon').value = '-74.005600';
+                    document.getElementById('waypointAlt').value = '20';
+                    this.addWaypoint();
+                }, 2000);
+                
+                // Simulate some log entries
+                setTimeout(() => {
+                    this.addLogEntry('Autopilot system ready', 'success');
+                    this.addLogEntry('GPS acquiring satellites...', 'info');
+                    this.addLogEntry('IMU calibration complete', 'success');
+                }, 1000);
+                
+                setTimeout(() => {
+                    this.addLogEntry('GPS fix acquired', 'success');
+                    this.addLogEntry('Home position set', 'info');
+                }, 3000);
+            }
+
+            // Method to connect to actual drone (placeholder)
+            connectToDrone(connectionString) {
+                this.addLogEntry(`Attempting to connect to: ${connectionString}`, 'info');
+                
+                // Simulate connection attempt
+                setTimeout(() => {
+                    this.connected = true;
+                    this.addLogEntry('Connection established', 'success');
+                    this.updateConnectionStatus();
+                }, 2000);
+            }
+
+            // Method to load mission from file (placeholder)
+            loadMissionFromFile(file) {
+                // In a real implementation, this would parse a mission file
+                this.addLogEntry(`Loading mission from: ${file.name}`, 'info');
+            }
+
+            // Method to save mission to file (placeholder)
+            saveMissionToFile() {
+                if (this.waypoints.length === 0) {
+                    this.addLogEntry('No waypoints to save', 'warning');
+                    return;
+                }
+                
+                const missionData = {
+                    waypoints: this.waypoints,
+                    created: new Date().toISOString()
+                };
+                
+                // In a real implementation, this would save to a file
+                this.addLogEntry(`Mission saved: ${this.waypoints.length} waypoints`, 'success');
+                console.log('Mission data:', missionData);
+            }
+
+            // Method to get real-time video feed (placeholder)
+            initializeVideoFeed() {
+                // In a real implementation, this would set up video streaming
+                this.addLogEntry('Video feed initialization not implemented', 'info');
+            }
+
+            // Method to configure autopilot parameters
+            configureAutopilot(parameters) {
+                this.addLogEntry('Autopilot parameters updated', 'success');
+                console.log('Autopilot config:', parameters);
+            }
+
+            // Method to perform system health check
+            performHealthCheck() {
+                this.addLogEntry('Performing system health check...', 'info');
+                
+                const checks = [
+                    { name: 'Battery', status: this.telemetryData.batteryVoltage > 11.0 },
+                    { name: 'GPS', status: this.telemetryData.gpsStatus },
+                    { name: 'IMU', status: true },
+                    { name: 'Motors', status: true },
+                    { name: 'Radio', status: this.connected }
+                ];
+                
+                checks.forEach(check => {
+                    const status = check.status ? 'OK' : 'FAIL';
+                    const type = check.status ? 'success' : 'error';
+                    this.addLogEntry(`${check.name}: ${status}`, type);
+                });
+            }
+        }
+
+        // Initialize the ground station
+        let groundStation;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            groundStation = new GroundStation();
+            
+            // Add keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    switch(e.key) {
+                        case 'a':
+                            e.preventDefault();
+                            groundStation.sendCommand('arm');
+                            break;
+                        case 'd':
+                            e.preventDefault();
+                            groundStation.sendCommand('disarm');
+                            break;
+                        case 't':
+                            e.preventDefault();
+                            groundStation.sendCommand('takeoff');
+                            break;
+                        case 'l':
+                            e.preventDefault();
+                            groundStation.sendCommand('land');
+                            break;
+                        case 'h':
+                            e.preventDefault();
+                            groundStation.performHealthCheck();
+                            break;
+                    }
+                }
+                
+                // Emergency stop with spacebar
+                if (e.code === 'Space' && e.ctrlKey) {
+                    e.preventDefault();
+                    groundStation.emergencyStop();
+                }
+            });
+            
+            // Show keyboard shortcuts help
+            console.log('Keyboard shortcuts:');
+            console.log('Ctrl+A: Arm');
+            console.log('Ctrl+D: Disarm');
+            console.log('Ctrl+T: Takeoff');
+            console.log('Ctrl+L: Land');
+            console.log('Ctrl+H: Health Check');
+            console.log('Ctrl+Space: Emergency Stop');
+        });
+
+        // Expose groundStation globally for button callbacks
+        window.groundStation = groundStation;
+    </script>
+</body>
+</html>
