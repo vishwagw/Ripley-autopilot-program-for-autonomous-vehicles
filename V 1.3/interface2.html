@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ripley Ground Station</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            color: #e0e6ed;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+            gap: 1px;
+            background: #0a0a15;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            background: linear-gradient(90deg, #1e3a8a 0%, #3730a3 100%);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+
+        .connection-status {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ef4444;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.connected {
+            background: #10b981;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .left-panel, .right-panel {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid #334155;
+            overflow-y: auto;
+        }
+
+        .main-display {
+            background: #0f172a;
+            position: relative;
+            border: 1px solid #334155;
+        }
+
+        .panel-section {
+            margin: 15px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #475569;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #60a5fa;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .telemetry-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+
+        .telemetry-label {
+            color: #94a3b8;
+        }
+
+        .telemetry-value {
+            color: #e2e8f0;
+            font-weight: bold;
+        }
+
+        .critical { color: #ef4444; }
+        .warning { color: #f59e0b; }
+        .good { color: #10b981; }
+
+        .control-btn {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            background: linear-gradient(135deg, #1e40af 0%, #3730a3 100%);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .control-btn:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #4338ca 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+        }
+
+        .control-btn.danger {
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+        }
+
+        .control-btn.danger:hover {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+
+        .mode-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin: 10px 0;
+        }
+
+        .mode-btn {
+            padding: 8px;
+            background: rgba(51, 65, 85, 0.5);
+            border: 1px solid #64748b;
+            border-radius: 4px;
+            color: #cbd5e1;
+            cursor: pointer;
+            font-size: 11px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .mode-btn.active {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            border-color: #10b981;
+            color: white;
+        }
+
+        .waypoint-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .waypoint-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin: 4px 0;
+            background: rgba(51, 65, 85, 0.3);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .waypoint-coords {
+            color: #94a3b8;
+        }
+
+        .waypoint-delete {
+            background: #dc2626;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 2px 6px;
+            cursor: pointer;
+            font-size: 10px;
+        }
+
+        .hud-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .altitude-indicator, .speed-indicator {
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .indicator-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #60a5fa;
+            display: block;
+        }
+
+        .indicator-label {
+            font-size: 12px;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .compass {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 120px;
+            height: 120px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 2px solid #334155;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+
+        .attitude-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 2px solid #334155;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .input-group {
+            margin: 10px 0;
+        }
+
+        .input-group label {
+            display: block;
+            color: #94a3b8;
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            background: rgba(51, 65, 85, 0.5);
+            border: 1px solid #64748b;
+            border-radius: 4px;
+            color: #e2e8f0;
+            font-size: 13px;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+        }
+
+        #map3d {
+            width: 100%;
+            height: 100%;
+        }
+
+        .console {
+            background: #000;
+            border-radius: 6px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .console-line {
+            margin: 2px 0;
+            opacity: 0.8;
+        }
+
+        .console-line.error { color: #ef4444; }
+        .console-line.warning { color: #f59e0b; }
+        .console-line.info { color: #60a5fa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🚁 RIPLEY AUTOPILOT: V 1.3</div>
+            <div class="connection-status">
+                <span id="connection-text">DISCONNECTED</span>
+                <div class="status-indicator" id="status-indicator"></div>
+            </div>
+        </div>
+
+        <div class="left-panel">
+            <div class="panel-section">
+                <div class="section-title">Telemetry</div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">GPS Status:</span>
+                    <span class="telemetry-value good" id="gps-status">3D FIX</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">Satellites:</span>
+                    <span class="telemetry-value" id="satellites">12</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">Battery:</span>
+                    <span class="telemetry-value warning" id="battery">14.2V</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">Signal:</span>
+                    <span class="telemetry-value good" id="signal">-65 dBm</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">Flight Time:</span>
+                    <span class="telemetry-value" id="flight-time">00:12:34</span>
+                </div>
+                <div class="telemetry-item">
+                    <span class="telemetry-label">Distance:</span>
+                    <span class="telemetry-value" id="distance">145m</span>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">Flight Modes</div>
+                <div class="mode-selector">
+                    <div class="mode-btn active" data-mode="stabilize">STABILIZE</div>
+                    <div class="mode-btn" data-mode="loiter">LOITER</div>
+                    <div class="mode-btn" data-mode="auto">AUTO</div>
+                    <div class="mode-btn" data-mode="rtl">RTL</div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">Quick Actions</div>
+                <button class="control-btn" onclick="arm()">ARM MOTORS</button>
+                <button class="control-btn danger" onclick="disarm()">DISARM</button>
+                <button class="control-btn" onclick="takeoff()">AUTO TAKEOFF</button>
+                <button class="control-btn danger" onclick="emergencyStop()">EMERGENCY STOP</button>
+            </div>
+        </div>
+
+        <div class="main-display">
+            <div id="map3d"></div>
+            
+            <div class="hud-overlay">
+                <div class="hud-top">
+                    <div class="altitude-indicator">
+                        <span class="indicator-value" id="altitude">45.2</span>
+                        <span class="indicator-label">Altitude (m)</span>
+                    </div>
+                    <div class="speed-indicator">
+                        <span class="indicator-value" id="speed">12.5</span>
+                        <span class="indicator-label">Speed (m/s)</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="compass" id="compass">
+                <span id="heading">045°</span>
+            </div>
+
+            <div class="attitude-indicator">
+                <div style="text-align: center; color: #60a5fa; font-size: 12px;">
+                    <div>PITCH: <span id="pitch">-2.1°</span></div>
+                    <div style="margin-top: 5px;">ROLL: <span id="roll">1.3°</span></div>
+                    <div style="margin-top: 5px;">YAW: <span id="yaw">045°</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="panel-section">
+                <div class="section-title">Mission Planning</div>
+                <div class="input-group">
+                    <label>Waypoint Latitude</label>
+                    <input type="number" id="wp-lat" step="0.0001" placeholder="37.4419">
+                </div>
+                <div class="input-group">
+                    <label>Waypoint Longitude</label>
+                    <input type="number" id="wp-lon" step="0.0001" placeholder="-122.1430">
+                </div>
+                <div class="input-group">
+                    <label>Altitude (m)</label>
+                    <input type="number" id="wp-alt" placeholder="50">
+                </div>
+                <button class="control-btn" onclick="addWaypoint()">ADD WAYPOINT</button>
+                <button class="control-btn" onclick="uploadMission()">UPLOAD MISSION</button>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">Waypoints</div>
+                <div class="waypoint-list" id="waypoint-list">
+                    <div class="waypoint-item">
+                        <div>
+                            <div>WP1: HOME</div>
+                            <div class="waypoint-coords">37.4419, -122.1430</div>
+                        </div>
+                        <button class="waypoint-delete">×</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">Parameters</div>
+                <div class="input-group">
+                    <label>Max Speed (m/s)</label>
+                    <input type="number" id="max-speed" value="15">
+                </div>
+                <div class="input-group">
+                    <label>RTL Altitude (m)</label>
+                    <input type="number" id="rtl-alt" value="30">
+                </div>
+                <button class="control-btn" onclick="updateParams()">UPDATE PARAMS</button>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">Console</div>
+                <div class="console" id="console">
+                    <div class="console-line info">[12:34:56] System initialized</div>
+                    <div class="console-line warning">[12:35:02] Battery voltage low</div>
+                    <div class="console-line info">[12:35:15] GPS lock acquired</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let scene, camera, renderer, drone, terrain;
+        let isConnected = false;
+        let telemetryData = {
+            altitude: 45.2,
+            speed: 12.5,
+            heading: 45,
+            pitch: -2.1,
+            roll: 1.3,
+            yaw: 45,
+            lat: 37.4419,
+            lon: -122.1430,
+            battery: 14.2,
+            satellites: 12,
+            flightTime: '00:12:34',
+            distance: 145
+        };
+        let waypoints = [];
+        let currentMode = 'stabilize';
+
+        // Initialize 3D scene
+        function init3D() {
+            const container = document.getElementById('map3d');
+            
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x001122);
+            scene.fog = new THREE.Fog(0x001122, 100, 1000);
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 2000);
+            camera.position.set(0, 100, 100);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(100, 100, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+
+            // Create terrain
+            const terrainGeometry = new THREE.PlaneGeometry(500, 500, 50, 50);
+            const terrainMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0x228B22,
+                wireframe: false 
+            });
+            terrain = new THREE.Mesh(terrainGeometry, terrainMaterial);
+            terrain.rotation.x = -Math.PI / 2;
+            terrain.receiveShadow = true;
+            scene.add(terrain);
+
+            // Add some random terrain variation
+            const vertices = terrainGeometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                vertices[i + 2] = Math.random() * 10 - 5; // Z coordinate
+            }
+            terrainGeometry.attributes.position.needsUpdate = true;
+
+            // Create drone
+            createDrone();
+
+            // Add grid
+            const gridHelper = new THREE.GridHelper(500, 50, 0x444444, 0x444444);
+            scene.add(gridHelper);
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createDrone() {
+            const droneGroup = new THREE.Group();
+
+            // Drone body
+            const bodyGeometry = new THREE.BoxGeometry(2, 0.5, 2);
+            const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.castShadow = true;
+            droneGroup.add(body);
+
+            // Arms
+            const armGeometry = new THREE.CylinderGeometry(0.1, 0.1, 3);
+            const armMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            
+            for (let i = 0; i < 4; i++) {
+                const arm = new THREE.Mesh(armGeometry, armMaterial);
+                const angle = (i * Math.PI) / 2;
+                arm.position.x = Math.cos(angle) * 1.5;
+                arm.position.z = Math.sin(angle) * 1.5;
+                arm.rotation.z = Math.PI / 2;
+                arm.castShadow = true;
+                droneGroup.add(arm);
+
+                // Propellers
+                const propGeometry = new THREE.CylinderGeometry(0.8, 0.8, 0.05);
+                const propMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0x888888, 
+                    transparent: true, 
+                    opacity: 0.7 
+                });
+                const propeller = new THREE.Mesh(propGeometry, propMaterial);
+                propeller.position.x = Math.cos(angle) * 2.2;
+                propeller.position.y = 0.3;
+                propeller.position.z = Math.sin(angle) * 2.2;
+                propeller.castShadow = true;
+                droneGroup.add(propeller);
+            }
+
+            // LED indicators
+            const ledGeometry = new THREE.SphereGeometry(0.1);
+            const ledMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+            const led = new THREE.Mesh(ledGeometry, ledMaterial);
+            led.position.y = 0.3;
+            droneGroup.add(led);
+
+            droneGroup.position.set(0, telemetryData.altitude, 0);
+            droneGroup.castShadow = true;
+            scene.add(droneGroup);
+            
+            drone = droneGroup;
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('map3d');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotate drone based on yaw
+            if (drone) {
+                drone.rotation.y = THREE.MathUtils.degToRad(telemetryData.yaw);
+                drone.rotation.x = THREE.MathUtils.degToRad(telemetryData.pitch);
+                drone.rotation.z = THREE.MathUtils.degToRad(telemetryData.roll);
+                drone.position.y = telemetryData.altitude;
+            }
+
+            // Orbit camera around drone
+            const time = Date.now() * 0.0005;
+            camera.position.x = Math.cos(time) * 150;
+            camera.position.z = Math.sin(time) * 150;
+            camera.lookAt(drone ? drone.position : new THREE.Vector3(0, 0, 0));
+
+            renderer.render(scene, camera);
+        }
+
+        // Telemetry simulation
+        function simulateTelemetry() {
+            if (!isConnected) return;
+
+            // Simulate changing values
+            telemetryData.altitude += (Math.random() - 0.5) * 2;
+            telemetryData.speed += (Math.random() - 0.5) * 1;
+            telemetryData.heading += (Math.random() - 0.5) * 5;
+            telemetryData.pitch += (Math.random() - 0.5) * 2;
+            telemetryData.roll += (Math.random() - 0.5) * 2;
+            telemetryData.yaw += (Math.random() - 0.5) * 5;
+            telemetryData.battery -= 0.001;
+
+            // Clamp values
+            telemetryData.altitude = Math.max(0, telemetryData.altitude);
+            telemetryData.speed = Math.max(0, telemetryData.speed);
+            telemetryData.heading = (telemetryData.heading + 360) % 360;
+            telemetryData.pitch = Math.max(-90, Math.min(90, telemetryData.pitch));
+            telemetryData.roll = Math.max(-90, Math.min(90, telemetryData.roll));
+            telemetryData.yaw = (telemetryData.yaw + 360) % 360;
+
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('altitude').textContent = telemetryData.altitude.toFixed(1);
+            document.getElementById('speed').textContent = telemetryData.speed.toFixed(1);
+            document.getElementById('heading').textContent = telemetryData.heading.toFixed(0) + '°';
+            document.getElementById('pitch').textContent = telemetryData.pitch.toFixed(1) + '°';
+            document.getElementById('roll').textContent = telemetryData.roll.toFixed(1) + '°';
+            document.getElementById('yaw').textContent = telemetryData.yaw.toFixed(0) + '°';
+            document.getElementById('battery').textContent = telemetryData.battery.toFixed(1) + 'V';
+            document.getElementById('satellites').textContent = telemetryData.satellites;
+            document.getElementById('flight-time').textContent = telemetryData.flightTime;
+            document.getElementById('distance').textContent = telemetryData.distance + 'm';
+
+            // Update battery color based on voltage
+            const batteryElement = document.getElementById('battery');
+            if (telemetryData.battery < 11.0) {
+                batteryElement.className = 'telemetry-value critical';
+            } else if (telemetryData.battery < 12.0) {
+                batteryElement.className = 'telemetry-value warning';
+            } else {
+                batteryElement.className = 'telemetry-value good';
+            }
+        }
+
+        // Connection management
+        function toggleConnection() {
+            isConnected = !isConnected;
+            const indicator = document.getElementById('status-indicator');
+            const text = document.getElementById('connection-text');
+            
+            if (isConnected) {
+                indicator.classList.add('connected');
+                text.textContent = 'CONNECTED';
+                addConsoleMessage('Connected to drone', 'info');
+            } else {
+                indicator.classList.remove('connected');
+                text.textContent = 'DISCONNECTED';
+                addConsoleMessage('Disconnected from drone', 'warning');
+            }
+        }
+
+        // Control functions
+        function arm() {
+            if (!isConnected) {
+                addConsoleMessage('Cannot arm: Not connected', 'error');
+                return;
+            }
+            addConsoleMessage('Motors armed', 'info');
+        }
+
+        function disarm() {
+            addConsoleMessage('Motors disarmed', 'warning');
+        }
+
+        function takeoff() {
+            if (!isConnected) {
+                addConsoleMessage('Cannot takeoff: Not connected', 'error');
+                return;
+            }
+            addConsoleMessage('Auto takeoff initiated', 'info');
+            telemetryData.altitude = 10;
+        }
+
+        function emergencyStop() {
+            addConsoleMessage('EMERGENCY STOP ACTIVATED', 'error');
+            telemetryData.speed = 0;
+        }
+
+        // Mode selection
+        function setMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.mode === mode) {
+                    btn.classList.add('active');
+                }
+            });
+            addConsoleMessage(`Flight mode changed to ${mode.toUpperCase()}`, 'info');
+        }
+
+        // Mission planning
+        function addWaypoint() {
+            const lat = parseFloat(document.getElementById('wp-lat').value);
+            const lon = parseFloat(document.getElementById('wp-lon').value);
+            const alt = parseFloat(document.getElementById('wp-alt').value);
+
+            if (isNaN(lat) || isNaN(lon) || isNaN(alt)) {
+                addConsoleMessage('Invalid waypoint coordinates', 'error');
+                return;
+            }
+
+            const waypoint = { lat, lon, alt, id: waypoints.length + 1 };
+            waypoints.push(waypoint);
+            updateWaypointList();
+            addConsoleMessage(`Waypoint ${waypoint.id} added`, 'info');
+
+            // Clear inputs
+            document.getElementById('wp-lat').value = '';
+            document.getElementById('wp-lon').value = '';
+            document.getElementById('wp-alt').value = '';
+        }
+
+        function updateWaypointList() {
+            const list = document.getElementById('waypoint-list');
+            list.innerHTML = '<div class="waypoint-item"><div><div>WP0: HOME</div><div class="waypoint-coords">37.4419, -122.1430</div></div></div>';
+            
+            waypoints.forEach(wp => {
+                const item = document.createElement('div');
+                item.className = 'waypoint-item';
+                item.innerHTML = `
+                    <div>
+                        <div>WP${wp.id}: ${wp.alt}m</div>
+                        <div class="waypoint-coords">${wp.lat.toFixed(4)}, ${wp.lon.toFixed(4)}</div>
+                    </div>
+                    <button class="waypoint-delete" onclick="removeWaypoint(${wp.id})">×</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function removeWaypoint(id) {
+            waypoints = waypoints.filter(wp => wp.id !== id);
+            updateWaypointList();
+            addConsoleMessage(`Waypoint ${id} removed`, 'warning');
+        }
+
+        function uploadMission() {
+            if (!isConnected) {
+                addConsoleMessage('Cannot upload mission: Not connected', 'error');
+                return;
+            }
+            addConsoleMessage(`Mission uploaded: ${waypoints.length} waypoints`, 'info');
+        }
+
+        function updateParams() {
+            const maxSpeed = document.getElementById('max-speed').value;
+            const rtlAlt = document.getElementById('rtl-alt').value;
+            addConsoleMessage(`Parameters updated: Max speed ${maxSpeed}m/s, RTL alt ${rtlAlt}m`,
+            'info');
+        }
+        function addConsoleMessage(message, type) {
+            const consoleElement = document.getElementById('console');
+            const line = document.createElement('div');
+            line.className = `console-line ${type}`;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            consoleElement.appendChild(line);
+            consoleElement.scrollTop = consoleElement.scrollHeight; // Auto-scroll
+        }
+        // Initialize everything
+        init3D();
+        animate();
+        setInterval(simulateTelemetry, 1000); // Simulate telemetry every second
+        document.getElementById('status-indicator').addEventListener('click', toggleConnection);
