@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Drone Ground Station</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/umd/lucide.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #111827;
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .status-bar {
+            background-color: #1f2937;
+            border-bottom: 1px solid #374151;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .status-left, .status-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #d1d5db;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .status-dot.connected { background-color: #10b981; }
+        .status-dot.disconnected { background-color: #ef4444; }
+
+        .armed-badge {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .armed-badge.armed {
+            background-color: #dc2626;
+            color: white;
+        }
+
+        .armed-badge.disarmed {
+            background-color: #4b5563;
+            color: #d1d5db;
+        }
+
+        .main-container {
+            display: flex;
+            height: calc(100vh - 50px);
+        }
+
+        .content-area {
+            flex: 1;
+            padding: 16px;
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 16px;
+        }
+
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .tab-button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            background-color: #374151;
+            color: #d1d5db;
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .tab-button.active {
+            background-color: #2563eb;
+            color: white;
+        }
+
+        .tab-button:hover {
+            background-color: #4b5563;
+        }
+
+        .tab-button.active:hover {
+            background-color: #1d4ed8;
+        }
+
+        .panel {
+            background-color: #111827;
+            border-radius: 8px;
+            padding: 16px;
+            flex: 1;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .map-container, .camera-container {
+            aspect-ratio: 16/9;
+            background-color: #1f2937;
+            border-radius: 8px;
+            position: relative;
+            cursor: crosshair;
+            overflow: hidden;
+        }
+
+        .map-background {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(59, 130, 246, 0.1));
+            border-radius: 8px;
+        }
+
+        .map-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .drone-marker {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: #ef4444;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            left: 50%;
+            top: 50%;
+            z-index: 10;
+        }
+
+        .drone-marker::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-color: #ef4444;
+            border-radius: 50%;
+            animation: ping 2s infinite;
+            opacity: 0.75;
+        }
+
+        @keyframes ping {
+            0% { transform: scale(1); opacity: 1; }
+            75%, 100% { transform: scale(2); opacity: 0; }
+        }
+
+        .waypoint {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #3b82f6;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            z-index: 5;
+        }
+
+        .waypoint-label {
+            position: absolute;
+            top: -24px;
+            left: -8px;
+            font-size: 12px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        .coordinates {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            font-size: 12px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .control-panel {
+            background-color: #1f2937;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .control-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .control-button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .control-button.connect {
+            background-color: #10b981;
+            color: white;
+        }
+
+        .control-button.disconnect {
+            background-color: #dc2626;
+            color: white;
+        }
+
+        .control-button.arm {
+            background-color: #f59e0b;
+            color: white;
+        }
+
+        .control-button.disarm {
+            background-color: #dc2626;
+            color: white;
+        }
+
+        .control-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .select-group {
+            margin-bottom: 16px;
+        }
+
+        .select-label {
+            display: block;
+            font-size: 14px;
+            color: #9ca3af;
+            margin-bottom: 8px;
+        }
+
+        .select-input {
+            width: 100%;
+            background-color: #374151;
+            color: white;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            padding: 8px 12px;
+        }
+
+        .action-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+
+        .action-button {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .action-button.takeoff { background-color: #2563eb; }
+        .action-button.pause { background-color: #f59e0b; }
+        .action-button.rtl { background-color: #dc2626; }
+
+        .instruments-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .instrument {
+            background-color: #1f2937;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .instrument-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #9ca3af;
+            margin-bottom: 8px;
+        }
+
+        .attitude-indicator {
+            width: 96px;
+            height: 96px;
+            margin: 0 auto 8px;
+            border-radius: 50%;
+            background: linear-gradient(to bottom, #3b82f6, #10b981);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .attitude-inner {
+            width: 80px;
+            height: 80px;
+            background-color: #1f2937;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s;
+        }
+
+        .attitude-line {
+            width: 32px;
+            height: 2px;
+            background-color: white;
+        }
+
+        .compass {
+            width: 96px;
+            height: 96px;
+            margin: 0 auto 8px;
+            border: 2px solid #4b5563;
+            border-radius: 50%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .compass-inner {
+            width: 72px;
+            height: 72px;
+            background-color: #374151;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s;
+        }
+
+        .compass-needle {
+            color: #ef4444;
+        }
+
+        .compass-n {
+            position: absolute;
+            top: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: white;
+        }
+
+        .instrument-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .instrument-unit {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .instrument-details {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-top: 8px;
+        }
+
+        .camera-view {
+            aspect-ratio: 16/9;
+            background-color: #1f2937;
+            border-radius: 8px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+
+        .camera-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(34, 197, 94, 0.1));
+            border-radius: 8px;
+        }
+
+        .camera-icon {
+            color: #4b5563;
+            width: 64px;
+            height: 64px;
+        }
+
+        .camera-timestamp {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            font-size: 12px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
+        .camera-crosshair {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            color: rgba(255, 255, 255, 0.5);
+            width: 24px;
+            height: 24px;
+        }
+
+        .camera-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .slider-label {
+            font-size: 14px;
+            color: #9ca3af;
+            margin-bottom: 4px;
+        }
+
+        .slider {
+            width: 100%;
+            margin-bottom: 4px;
+        }
+
+        .slider-value {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .record-button {
+            padding: 4px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .record-button.recording {
+            background-color: #dc2626;
+            color: white;
+        }
+
+        .record-button.not-recording {
+            background-color: #4b5563;
+            color: #d1d5db;
+        }
+
+        .mission-panel {
+            background-color: #1f2937;
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .mission-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .mission-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .mission-button {
+            padding: 4px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+        }
+
+        .mission-button.clear {
+            background-color: #dc2626;
+        }
+
+        .mission-button.upload {
+            background-color: #10b981;
+        }
+
+        .mission-info {
+            font-size: 14px;
+            color: #9ca3af;
+            margin-bottom: 16px;
+        }
+
+        .waypoints-list {
+            max-height: 200px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .waypoint-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: #374151;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .waypoint-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .waypoint-name {
+            font-size: 14px;
+            color: white;
+        }
+
+        .waypoint-coords {
+            font-size: 12px;
+            color: #9ca3af;
+        }
+
+        .waypoint-delete {
+            color: #f87171;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .waypoint-delete:hover {
+            color: #dc2626;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="status-left">
+            <div class="status-item">
+                <div class="status-dot disconnected" id="connectionDot"></div>
+                <span id="connectionStatus">Disconnected</span>
+            </div>
+            <div class="status-item">
+                <i data-lucide="wifi"></i>
+                <span id="signalStrength">0%</span>
+            </div>
+            <div class="status-item">
+                <i data-lucide="battery"></i>
+                <span id="batteryLevel">0%</span>
+            </div>
+        </div>
+        <div class="status-right">
+            <div class="status-item">
+                <span>GPS: <span id="gpsStatus">0 sats</span></span>
+            </div>
+            <div class="status-item">
+                <span>Mode: <span id="flightModeDisplay">STABILIZE</span></span>
+            </div>
+            <div class="armed-badge disarmed" id="armedStatus">DISARMED</div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <div class="content-area">
+            <!-- Left Panel -->
+            <div class="left-panel">
+                <!-- Tab Buttons -->
+                <div class="tab-buttons">
+                    <button class="tab-button active" data-tab="flight">
+                        <i data-lucide="map"></i>
+                        Flight
+                    </button>
+                    <button class="tab-button" data-tab="camera">
+                        <i data-lucide="camera"></i>
+                        Camera
+                    </button>
+                    <button class="tab-button" data-tab="mission">
+                        <i data-lucide="route"></i>
+                        Mission
+                    </button>
+                </div>
+
+                <!-- Flight Tab -->
+                <div class="panel" id="flightTab">
+                    <div class="panel-header">
+                        <h3 class="panel-title">Map</h3>
+                        <button class="mission-button upload">Center on Drone</button>
+                    </div>
+                    <div class="map-container" id="mapContainer">
+                        <div class="map-background"></div>
+                        <div class="map-grid"></div>
+                        <div class="drone-marker"></div>
+                        <svg id="flightPath" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;">
+                            <polyline id="pathLine" fill="none" stroke="rgba(59, 130, 246, 0.8)" stroke-width="2" stroke-dasharray="5,5" points=""></polyline>
+                        </svg>
+                        <div class="coordinates" id="coordinates">
+                            Lat: 37.774900, Lng: -122.419400
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Camera Tab -->
+                <div class="panel hidden" id="cameraTab">
+                    <div class="panel-header">
+                        <h3 class="panel-title">Camera Feed</h3>
+                        <button class="record-button not-recording" id="recordButton">Record</button>
+                    </div>
+                    <div class="camera-view">
+                        <div class="camera-overlay"></div>
+                        <i data-lucide="camera" class="camera-icon"></i>
+                        <div class="camera-timestamp" id="timestamp">
+                            Live Feed - 00:00:00
+                        </div>
+                        <i data-lucide="crosshair" class="camera-crosshair"></i>
+                    </div>
+                    <div class="camera-controls">
+                        <div class="slider-group">
+                            <label class="slider-label">Gimbal Tilt</label>
+                            <input type="range" class="slider" id="gimbalTilt" min="-90" max="30" value="0">
+                            <span class="slider-value" id="tiltValue">0°</span>
+                        </div>
+                        <div class="slider-group">
+                            <label class="slider-label">Gimbal Pan</label>
+                            <input type="range" class="slider" id="gimbalPan" min="-180" max="180" value="0">
+                            <span class="slider-value" id="panValue">0°</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mission Tab -->
+                <div class="panel hidden" id="missionTab">
+                    <div class="panel-header">
+                        <h3 class="panel-title">Map</h3>
+                        <button class="mission-button upload">Center on Drone</button>
+                    </div>
+                    <div class="map-container" id="missionMapContainer">
+                        <div class="map-background"></div>
+                        <div class="map-grid"></div>
+                        <div class="drone-marker"></div>
+                        <svg id="missionFlightPath" style="position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;">
+                            <polyline id="missionPathLine" fill="none" stroke="rgba(59, 130, 246, 0.8)" stroke-width="2" stroke-dasharray="5,5" points=""></polyline>
+                        </svg>
+                        <div class="coordinates" id="missionCoordinates">
+                            Lat: 37.774900, Lng: -122.419400
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel -->
+            <div class="right-panel">
+                <!-- Control Panel (for Flight and Camera tabs) -->
+                <div class="control-panel" id="controlPanel">
+                    <h3 class="panel-title" style="margin-bottom: 16px;">Flight Controls</h3>
+                    
+                    <div class="control-grid">
+                        <button class="control-button connect" id="connectButton">
+                            <i data-lucide="radio"></i>
+                            Connect
+                        </button>
+                        <button class="control-button arm" id="armButton" disabled>
+                            <i data-lucide="alert-triangle"></i>
+                            Arm
+                        </button>
+                    </div>
+
+                    <div class="select-group">
+                        <label class="select-label">Flight Mode</label>
+                        <select class="select-input" id="flightModeSelect">
+                            <option value="STABILIZE">Stabilize</option>
+                            <option value="LOITER">Loiter</option>
+                            <option value="AUTO">Auto</option>
+                            <option value="RTL">Return to Launch</option>
+                            <option value="GUIDED">Guided</option>
+                        </select>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button class="action-button takeoff">
+                            <i data-lucide="play"></i>
+                            Takeoff
+                        </button>
+                        <button class="action-button pause">
+                            <i data-lucide="pause"></i>
+                            Pause
+                        </button>
+                        <button class="action-button rtl">
+                            <i data-lucide="home"></i>
+                            RTL
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Flight Instruments -->
+                <div class="instruments-grid" id="instrumentsPanel">
+                    <!-- Attitude Indicator -->
+                    <div class="instrument">
+                        <div class="instrument-title">Attitude</div>
+                        <div class="attitude-indicator">
+                            <div class="attitude-inner" id="attitudeInner">
+                                <div class="attitude-line"></div>
+                            </div>
+                        </div>
+                        <div class="instrument-details">
+                            <div>P: <span id="pitchValue">0.0</span>°</div>
+                            <div>R: <span id="rollValue">0.0</span>°</div>
+                            <div>Y: <span id="yawValue">0.0</span>°</div>
+                        </div>
+                    </div>
+
+                    <!-- Compass -->
+                    <div class="instrument">
+                        <div class="instrument-title">Heading</div>
+                        <div class="compass">
+                            <div class="compass-inner" id="compassInner">
+                                <i data-lucide="compass" class="compass-needle"></i>
+                            </div>
+                            <div class="compass-n">N</div>
+                        </div>
+                        <div class="instrument-details">
+                            <span id="headingValue">0</span>°
+                        </div>
+                    </div>
+
+                    <!-- Altitude -->
+                    <div class="instrument">
+                        <div class="instrument-title">Altitude</div>
+                        <div class="instrument-value" id="altitudeValue">0.0</div>
+                        <div class="instrument-unit">m AGL</div>
+                    </div>
+
+                    <!-- Speed -->
+                    <div class="instrument">
+                        <div class="instrument-title">Speed</div>
+                        <div class="instrument-value" id="speedValue">0.0</div>
+                        <div class="instrument-unit">m/s Ground Speed</div>
+                    </div>
+                </div>
+
+                <!-- Mission Panel (for Mission tab) -->
+                <div class="mission-panel hidden" id="missionPanel">
+                    <div class="mission-header">
+                        <h3 class="panel-title">Mission Planner</h3>
+                        <div class="mission-buttons">
+                            <button class="mission-button clear" id="clearWaypoints">Clear</button>
+                            <button class="mission-button upload">Upload</button>
+                        </div>
+                    </div>
+                    
+                    <div class="mission-info">
+                        Click on the map to add waypoints. Total: <span id="waypointCount">0</span> waypoints
+                    </div>
+                    
+                    <div class="waypoints-list" id="waypointsList">
+                        <!-- Waypoints will be added here dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Global state
+        let state = {
+            isConnected: false,
+            isArmed: false,
+            isRecording: false,
+            activeTab: 'flight',
+            flightMode: 'STABILIZE',
+            telemetry: {
+                altitude: 0,
+                speed: 0,
+                battery: 87,
+                signal: 85,
+                gps: { lat: 37.7749, lng: -122.4194, satellites: 12 },
+                attitude: { pitch: 0, roll: 0, yaw: 0 }
+            },
+            cameraSettings: {
+                gimbalTilt: 0,
+                gimbalPan: 0
+            },
+            waypoints: []
+        };
+
+        // DOM elements
+        const elements = {
+            connectionDot: document.getElementById('connectionDot'),
+            connectionStatus: document.getElementById('connectionStatus'),
+            signalStrength: document.getElementById('signalStrength'),
+            batteryLevel: document.getElementById('batteryLevel'),
+            gpsStatus: document.getElementById('gpsStatus'),
+            flightModeDisplay: document.getElementById('flightModeDisplay'),
+            armedStatus: document.getElementById('armedStatus'),
+            connectButton: document.getElementById('connectButton'),
+            armButton: document.getElementById('armButton'),
+            flightModeSelect: document.getElementById('flightModeSelect'),
+            recordButton: document.getElementById('recordButton'),
+            gimbalTilt: document.getElementById('gimbalTilt'),
+            gimbalPan: document.getElementById('gimbalPan'),
+            tiltValue: document.getElementById('tiltValue'),
+            panValue: document.getElementById('panValue'),
+            timestamp: document.getElementById('timestamp'),
+            coordinates: document.getElementById('coordinates'),
+            missionCoordinates: document.getElementById('missionCoordinates'),
+            waypointCount: document.getElementById('waypointCount'),
+            waypointsList: document.getElementById('waypointsList'),
+            clearWaypoints: document.getElementById('clearWaypoints'),
+            mapContainer: document.getElementById('mapContainer'),
+            missionMapContainer: document.getElementById('missionMapContainer'),
+            pathLine: document.getElementById('pathLine'),
+            missionPathLine: document.getElementById('missionPathLine'),
+            // Instruments
+            attitudeInner: document.getElementById('attitudeInner'),
+            compassInner: document.getElementById('compassInner'),
+            pitchValue: document.getElementById('pitchValue'),
+            rollValue: document.getElementById('rollValue'),
+            yawValue: document.getElementById('yawValue'),
+            headingValue: document.getElementById('headingValue'),
+            altitudeValue: document.getElementById('altitudeValue'),
+            speedValue: document.getElementById('speedValue')
+        };
+
+        // Tab switching
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const tab = button.dataset.tab;
+                switchTab(tab);
+            });
+        });
+
+        function switchTab(tab) {
+            state.activeTab = tab;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+            
+            // Show/hide tab content
+            document.getElementById('flightTab').classList.toggle('hidden', tab !== 'flight');
+            document.getElementById('cameraTab').classList.toggle('hidden', tab !== 'camera');
+            document.getElementById('missionTab').classList.toggle('hidden', tab !== 'mission');
+            
+            // Show/hide right panels
+            document.getElementById('controlPanel').classList.toggle('hidden', tab === 'mission');
+            document.getElementById('instrumentsPanel').classList.toggle('hidden', tab === 'mission');
+            document.getElementById('missionPanel').classList.toggle('hidden', tab !== 'mission');
+        }
+
+        // Connection toggle
+        elements.connectButton.addEventListener('click', () => {
+            state.isConnected = !state.isConnected;
+            updateConnectionStatus();
+            if (state.isConnected) {
+                startTelemetryUpdates();
+            }
+        });
+
+        function updateConnectionStatus() {
+            if (state.isConnected) {
+                elements.connectButton.innerHTML = '<i data-lucide="radio"></i> Disconnect';
+                elements.connectButton.classList.remove('connect');
+                elements.connectButton.classList.add('disconnect');
+                elements.armButton.disabled = false;
+            } else {
+                elements.connectionDot.classList.remove('connected');
+                elements.connectionDot.classList.add('disconnected');
+                elements.connectionStatus.textContent = 'Disconnected';
+                elements.connectButton.innerHTML = '<i data-lucide="radio"></i> Connect';
+                elements.connectButton.classList.remove('disconnect');
+                elements.connectButton.classList.add('connect');
+                elements.armButton.disabled = true;
+                state.isArmed = false;
+                updateArmedStatus();
+            }
+            lucide.createIcons();
+        }
+
+        // Arm/Disarm toggle
+        elements.armButton.addEventListener('click', () => {
+            if (state.isConnected) {
+                state.isArmed = !state.isArmed;
+                updateArmedStatus();
+            }
+        });
+
+        function updateArmedStatus() {
+            if (state.isArmed) {
+                elements.armedStatus.classList.remove('disarmed');
+                elements.armedStatus.classList.add('armed');
+                elements.armedStatus.textContent = 'ARMED';
+                elements.armButton.innerHTML = '<i data-lucide="alert-triangle"></i> Disarm';
+                elements.armButton.classList.remove('arm');
+                elements.armButton.classList.add('disarm');
+            } else {
+                elements.armedStatus.classList.remove('armed');
+                elements.armedStatus.classList.add('disarmed');
+                elements.armedStatus.textContent = 'DISARMED';
+                elements.armButton.innerHTML = '<i data-lucide="alert-triangle"></i> Arm';
+                elements.armButton.classList.remove('disarm');
+                elements.armButton.classList.add('arm');
+            }
+            lucide.createIcons();
+        }
+
+        // Flight mode selection
+        elements.flightModeSelect.addEventListener('change', (e) => {
+            state.flightMode = e.target.value;
+            elements.flightModeDisplay.textContent = state.flightMode;
+        });
+
+        // Recording toggle
+        elements.recordButton.addEventListener('click', () => {
+            state.isRecording = !state.isRecording;
+            updateRecordingStatus();
+        });
+
+        function updateRecordingStatus() {
+            if (state.isRecording) {
+                elements.recordButton.classList.remove('not-recording');
+                elements.recordButton.classList.add('recording');
+                elements.recordButton.textContent = 'Recording';
+            } else {
+                elements.recordButton.classList.remove('recording');
+                elements.recordButton.classList.add('not-recording');
+                elements.recordButton.textContent = 'Record';
+            }
+        }
+
+        // Camera controls
+        elements.gimbalTilt.addEventListener('input', (e) => {
+            state.cameraSettings.gimbalTilt = e.target.value;
+            elements.tiltValue.textContent = e.target.value + '°';
+        });
+
+        elements.gimbalPan.addEventListener('input', (e) => {
+            state.cameraSettings.gimbalPan = e.target.value;
+            elements.panValue.textContent = e.target.value + '°';
+        });
+
+        // Waypoint management
+        elements.mapContainer.addEventListener('click', addWaypoint);
+        elements.missionMapContainer.addEventListener('click', addWaypoint);
+        elements.clearWaypoints.addEventListener('click', clearAllWaypoints);
+
+        function addWaypoint(e) {
+            if (state.activeTab === 'mission') {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 100;
+                const y = ((e.clientY - rect.top) / rect.height) * 100;
+                
+                const waypoint = {
+                    id: Date.now(),
+                    x: x,
+                    y: y,
+                    lat: 37.7749 + (y/100 - 0.5) * 0.01,
+                    lng: -122.4194 + (x/100 - 0.5) * 0.01,
+                    altitude: 50,
+                    action: 'WAYPOINT'
+                };
+                
+                state.waypoints.push(waypoint);
+                updateWaypointsDisplay();
+                updateFlightPath();
+            }
+        }
+
+        function clearAllWaypoints() {
+            state.waypoints = [];
+            updateWaypointsDisplay();
+            updateFlightPath();
+        }
+
+        function removeWaypoint(id) {
+            state.waypoints = state.waypoints.filter(w => w.id !== id);
+            updateWaypointsDisplay();
+            updateFlightPath();
+        }
+
+        function updateWaypointsDisplay() {
+            elements.waypointCount.textContent = state.waypoints.length;
+            
+            // Clear existing waypoint markers
+            document.querySelectorAll('.waypoint').forEach(el => el.remove());
+            
+            // Clear waypoints list
+            elements.waypointsList.innerHTML = '';
+            
+            // Add waypoint markers and list items
+            state.waypoints.forEach((waypoint, index) => {
+                // Add marker to map
+                const marker = document.createElement('div');
+                marker.className = 'waypoint';
+                marker.style.left = waypoint.x + '%';
+                marker.style.top = waypoint.y + '%';
+                marker.innerHTML = `<div class="waypoint-label">${index + 1}</div>`;
+                marker.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // Could add waypoint selection logic here
+                });
+                
+                elements.missionMapContainer.appendChild(marker);
+                
+                // Add to waypoints list
+                const listItem = document.createElement('div');
+                listItem.className = 'waypoint-item';
+                listItem.innerHTML = `
+                    <div class="waypoint-info">
+                        <i data-lucide="map-pin" style="color: #3b82f6;"></i>
+                        <span class="waypoint-name">WP${index + 1}</span>
+                        <span class="waypoint-coords">${waypoint.lat.toFixed(6)}, ${waypoint.lng.toFixed(6)}</span>
+                    </div>
+                    <span class="waypoint-delete" onclick="removeWaypoint(${waypoint.id})">×</span>
+                `;
+                elements.waypointsList.appendChild(listItem);
+            });
+            
+            lucide.createIcons();
+        }
+
+        function updateFlightPath() {
+            const points = state.waypoints.map(w => `${w.x},${w.y}`).join(' ');
+            elements.missionPathLine.setAttribute('points', points);
+        }
+
+        // Telemetry updates
+        function startTelemetryUpdates() {
+            if (!state.isConnected) return;
+            
+            setInterval(() => {
+                if (!state.isConnected) return;
+                
+                // Simulate telemetry data
+                state.telemetry.altitude += (Math.random() - 0.5) * 2;
+                state.telemetry.speed = Math.max(0, state.telemetry.speed + (Math.random() - 0.5) * 5);
+                state.telemetry.battery = Math.max(0, state.telemetry.battery - 0.01);
+                state.telemetry.attitude.pitch = (Math.random() - 0.5) * 20;
+                state.telemetry.attitude.roll = (Math.random() - 0.5) * 20;
+                state.telemetry.attitude.yaw = (state.telemetry.attitude.yaw + (Math.random() - 0.5) * 10) % 360;
+                
+                updateTelemetryDisplay();
+            }, 1000);
+        }
+
+        function updateTelemetryDisplay() {
+            // Status bar updates
+            elements.signalStrength.textContent = state.telemetry.signal + '%';
+            elements.batteryLevel.textContent = Math.floor(state.telemetry.battery) + '%';
+            elements.gpsStatus.textContent = state.telemetry.gps.satellites + ' sats';
+            
+            // Coordinates
+            elements.coordinates.textContent = 
+                `Lat: ${state.telemetry.gps.lat.toFixed(6)}, Lng: ${state.telemetry.gps.lng.toFixed(6)}`;
+            elements.missionCoordinates.textContent = 
+                `Lat: ${state.telemetry.gps.lat.toFixed(6)}, Lng: ${state.telemetry.gps.lng.toFixed(6)}`;
+            
+            // Instruments
+            elements.altitudeValue.textContent = state.telemetry.altitude.toFixed(1);
+            elements.speedValue.textContent = state.telemetry.speed.toFixed(1);
+            elements.pitchValue.textContent = state.telemetry.attitude.pitch.toFixed(1);
+            elements.rollValue.textContent = state.telemetry.attitude.roll.toFixed(1);
+            elements.yawValue.textContent = state.telemetry.attitude.yaw.toFixed(1);
+            elements.headingValue.textContent = Math.floor(state.telemetry.attitude.yaw);
+            
+            // Attitude indicator
+            elements.attitudeInner.style.transform = `rotate(${state.telemetry.attitude.roll}deg)`;
+            
+            // Compass
+            elements.compassInner.style.transform = `rotate(${state.telemetry.attitude.yaw}deg)`;
+        }
+
+        // Update timestamp
+        function updateTimestamp() {
+            const now = new Date();
+            elements.timestamp.textContent = `Live Feed - ${now.toLocaleTimeString()}`;
+        }
+
+        // Initialize
+        updateConnectionStatus();
+        updateArmedStatus();
+        updateRecordingStatus();
+        updateWaypointsDisplay();
+        
+        // Start timestamp updates
+        setInterval(updateTimestamp, 1000);
+        updateTimestamp();
+
+        // Make removeWaypoint available globally
+        window.removeWaypoint = removeWaypoint;
+    </script>
+</body>
+</html>connectionDot.classList.remove('disconnected');
+                elements.connectionDot.classList.add('connected');
+                elements.connectionStatus.textContent = 'Connected';
+                elements.connectButton.innerHTML = '<i data-lucide="radio"></i> Disconnect';
+                elements.connectButton.classList.remove('connect');
